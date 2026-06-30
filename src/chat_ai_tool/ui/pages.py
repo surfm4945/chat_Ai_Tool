@@ -1,6 +1,9 @@
-﻿"""Streamlit pages and UI wiring."""
+"""Streamlit pages and UI wiring."""
 
 from __future__ import annotations
+
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import streamlit as st
 
@@ -23,6 +26,8 @@ from src.chat_ai_tool.services.chat_service import (
 )
 from src.chat_ai_tool.services.presence_service import format_contact_status, is_online
 
+LOCAL_TIMEZONE = ZoneInfo("Asia/Karachi")
+
 
 def _theme_tokens(theme: str) -> dict[str, str]:
     """Return color tokens for the selected visual mode."""
@@ -42,74 +47,110 @@ def _theme_tokens(theme: str) -> dict[str, str]:
             "message_bg": "rgba(15, 23, 42, 0.72)",
             "message_alt": "rgba(37, 99, 235, 0.16)",
         }
-    if theme == "light":
-        return {
-            "app_bg": "#f4f7fb",
-            "panel_bg": "rgba(255, 255, 255, 0.78)",
-            "panel_border": "rgba(15, 23, 42, 0.08)",
-            "text_main": "#0f172a",
-            "text_muted": "#64748b",
-            "accent": "#2563eb",
-            "accent_soft": "rgba(37, 99, 235, 0.12)",
-            "accent_text": "#1d4ed8",
-            "sidebar_bg": "rgba(255, 255, 255, 0.92)",
-            "shadow": "0 18px 40px rgba(15, 23, 42, 0.08)",
-            "message_bg": "rgba(255, 255, 255, 0.58)",
-            "message_alt": "rgba(37, 99, 235, 0.08)",
-        }
-    # system follows the browser preference with light defaults
     return {
-        "app_bg": "#eef2ff",
-        "panel_bg": "rgba(255, 255, 255, 0.74)",
+        "app_bg": "#f4f7fb",
+        "panel_bg": "rgba(255, 255, 255, 0.78)",
         "panel_border": "rgba(15, 23, 42, 0.08)",
         "text_main": "#0f172a",
         "text_muted": "#64748b",
         "accent": "#2563eb",
         "accent_soft": "rgba(37, 99, 235, 0.12)",
         "accent_text": "#1d4ed8",
-        "sidebar_bg": "rgba(255, 255, 255, 0.94)",
+        "sidebar_bg": "rgba(255, 255, 255, 0.92)",
         "shadow": "0 18px 40px rgba(15, 23, 42, 0.08)",
-        "message_bg": "rgba(255, 255, 255, 0.60)",
+        "message_bg": "rgba(255, 255, 255, 0.58)",
         "message_alt": "rgba(37, 99, 235, 0.08)",
     }
+
+
+def _parse_timestamp(value: str | None) -> datetime | None:
+    """Parse stored UTC timestamps safely."""
+
+    if not value:
+        return None
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def format_display_time(value: str | None) -> str:
+    """Format timestamps in a readable local-time style."""
+
+    parsed = _parse_timestamp(value)
+    if parsed is None:
+        return "Just now"
+
+    local_time = parsed.astimezone(LOCAL_TIMEZONE)
+    hour = local_time.strftime("%I").lstrip("0") or "12"
+    minute = local_time.strftime("%M")
+    suffix = local_time.strftime("%p")
+    timezone_name = local_time.strftime("%Z") or "PKT"
+    month = local_time.strftime("%b")
+    return f"{month} {local_time.day}, {local_time.year} {hour}:{minute} {suffix} {timezone_name}"
 
 
 def _apply_styles(theme: str) -> None:
     """Add polished app-wide styles."""
 
-    t = _theme_tokens(theme)
+    tokens = _theme_tokens(theme)
     system_override = ""
     if theme == "system":
-        system_override = """
+        dark_tokens = _theme_tokens("dark")
+        system_override = f"""
         <style>
-        @media (prefers-color-scheme: dark) {
-            .stApp {
-                background:
-                    radial-gradient(circle at top left, rgba(37, 99, 235, 0.16), transparent 26%),
-                    radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.14), transparent 22%),
-                    #0b1220;
-                color: #e2e8f0;
-            }
-            section[data-testid="stSidebar"] {
-                background: rgba(15, 23, 42, 0.94);
-                border-right: 1px solid rgba(148, 163, 184, 0.14);
-            }
-        }
+        @media (prefers-color-scheme: dark) {{
+            :root {{
+                --app-bg: {dark_tokens['app_bg']};
+                --panel-bg: {dark_tokens['panel_bg']};
+                --panel-border: {dark_tokens['panel_border']};
+                --text-main: {dark_tokens['text_main']};
+                --text-muted: {dark_tokens['text_muted']};
+                --accent: {dark_tokens['accent']};
+                --accent-soft: {dark_tokens['accent_soft']};
+                --accent-text: {dark_tokens['accent_text']};
+                --sidebar-bg: {dark_tokens['sidebar_bg']};
+                --shadow: {dark_tokens['shadow']};
+                --message-bg: {dark_tokens['message_bg']};
+                --message-alt: {dark_tokens['message_alt']};
+            }}
+        }}
         </style>
         """
+
     st.markdown(
         f"""
         <style>
+        :root {{
+            --app-bg: {tokens['app_bg']};
+            --panel-bg: {tokens['panel_bg']};
+            --panel-border: {tokens['panel_border']};
+            --text-main: {tokens['text_main']};
+            --text-muted: {tokens['text_muted']};
+            --accent: {tokens['accent']};
+            --accent-soft: {tokens['accent_soft']};
+            --accent-text: {tokens['accent_text']};
+            --sidebar-bg: {tokens['sidebar_bg']};
+            --shadow: {tokens['shadow']};
+            --message-bg: {tokens['message_bg']};
+            --message-alt: {tokens['message_alt']};
+        }}
         .stApp {{
             background:
                 radial-gradient(circle at top left, rgba(37, 99, 235, 0.16), transparent 26%),
                 radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.14), transparent 22%),
-                {t['app_bg']};
-            color: {t['text_main']};
+                var(--app-bg);
+            color: var(--text-main);
+        }}
+        .stApp, .stApp p, .stApp span, .stApp div, .stApp label, .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6 {{
+            color: var(--text-main);
+        }}
+        .stApp .stCaption, .stApp small {{
+            color: var(--text-muted);
         }}
         section[data-testid="stSidebar"] {{
-            background: {t['sidebar_bg']};
-            border-right: 1px solid {t['panel_border']};
+            background: var(--sidebar-bg);
+            border-right: 1px solid var(--panel-border);
         }}
         .sidebar-shell {{
             display: flex;
@@ -123,11 +164,11 @@ def _apply_styles(theme: str) -> None:
         .brand-title {{
             font-size: 1.35rem;
             font-weight: 800;
-            color: {t['text_main']};
+            color: var(--text-main);
             margin: 0;
         }}
         .brand-subtitle {{
-            color: {t['text_muted']};
+            color: var(--text-muted);
             font-size: 0.92rem;
             margin-top: 0.25rem;
         }}
@@ -138,7 +179,7 @@ def _apply_styles(theme: str) -> None:
             font-size: 0.74rem;
             text-transform: uppercase;
             letter-spacing: 0.08em;
-            color: {t['text_muted']};
+            color: var(--text-muted);
             margin-bottom: 0.55rem;
         }}
         .contact-card {{
@@ -148,31 +189,31 @@ def _apply_styles(theme: str) -> None:
             border-radius: 16px;
             border: 1px solid transparent;
             background: transparent;
-            color: {t['text_main']};
+            color: var(--text-main);
             text-align: left;
         }}
         .contact-card:hover {{
-            background: {t['accent_soft']};
-            border-color: {t['panel_border']};
+            background: var(--accent-soft);
+            border-color: var(--panel-border);
         }}
         .contact-card.active {{
-            background: {t['accent_soft']};
-            border-color: {t['accent']};
+            background: var(--accent-soft);
+            border-color: var(--accent);
         }}
         .contact-name {{
             font-weight: 700;
             font-size: 0.98rem;
         }}
         .contact-meta {{
-            color: {t['text_muted']};
+            color: var(--text-muted);
             font-size: 0.84rem;
         }}
         .app-shell {{
-            background: {t['panel_bg']};
+            background: var(--panel-bg);
             border-radius: 28px;
             padding: 1.25rem;
-            border: 1px solid {t['panel_border']};
-            box-shadow: {t['shadow']};
+            border: 1px solid var(--panel-border);
+            box-shadow: var(--shadow);
             backdrop-filter: blur(18px);
         }}
         .hero-shell {{
@@ -187,37 +228,38 @@ def _apply_styles(theme: str) -> None:
             font-weight: 800;
         }}
         .hero-subtitle {{
-            color: {t['text_muted']};
+            color: var(--text-muted);
             margin: 0;
         }}
         .chat-empty {{
-            border: 1px dashed {t['panel_border']};
+            border: 1px dashed var(--panel-border);
             border-radius: 22px;
             padding: 2rem;
             background: rgba(255, 255, 255, 0.35);
-            color: {t['text_main']};
+            color: var(--text-main);
         }}
         .status-pill {{
             display: inline-block;
             padding: 0.25rem 0.65rem;
             border-radius: 999px;
-            background: {t['accent_soft']};
-            color: {t['accent_text']};
+            background: var(--accent-soft);
+            color: var(--accent-text);
             font-weight: 600;
         }}
         .status-pill.offline {{
             background: rgba(148, 163, 184, 0.12);
-            color: {t['text_muted']};
+            color: var(--text-muted);
         }}
         .message-card {{
             border-radius: 18px;
             padding: 0.9rem 1rem;
             margin-bottom: 0.75rem;
-            border: 1px solid {t['panel_border']};
-            background: {t['message_bg']};
+            border: 1px solid var(--panel-border);
+            background: var(--message-bg);
+            color: var(--text-main);
         }}
         .message-card.outgoing {{
-            background: {t['message_alt']};
+            background: var(--message-alt);
             border-color: rgba(37, 99, 235, 0.18);
         }}
         .message-header {{
@@ -226,14 +268,14 @@ def _apply_styles(theme: str) -> None:
             justify-content: space-between;
             gap: 1rem;
             margin-bottom: 0.35rem;
-            color: {t['text_muted']};
+            color: var(--text-muted);
             font-size: 0.8rem;
         }}
         .chat-composer {{
-            border: 1px solid {t['panel_border']};
+            border: 1px solid var(--panel-border);
             border-radius: 20px;
             padding: 0.75rem;
-            background: {t['message_bg']};
+            background: var(--message-bg);
             margin-top: 1rem;
         }}
         </style>
@@ -241,7 +283,6 @@ def _apply_styles(theme: str) -> None:
         """,
         unsafe_allow_html=True,
     )
-
 
 def _initialize_ui_state() -> None:
     """Set default UI state for the dashboard."""
@@ -368,7 +409,7 @@ def _render_sidebar(
             ):
                 st.session_state.selected_contact_id = contact.user.id
                 st.rerun()
-            meta = "online" if is_online(contact.last_seen_at) else "offline"
+            meta = "online" if is_online(contact.last_seen_at) else f"last seen {format_display_time(contact.last_seen_at)}"
             st.caption(meta)
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -376,7 +417,9 @@ def _render_sidebar(
         st.markdown("<div class='sidebar-label'>Recent activity</div>", unsafe_allow_html=True)
         if conversations:
             for preview in conversations[:5]:
-                st.caption(f"{preview.other_user.username} - {preview.last_message_preview}")
+                st.caption(
+                    f"{preview.other_user.username} - {preview.last_message_preview} - {format_display_time(preview.updated_at)}"
+                )
         else:
             st.caption("No recent chats yet.")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -459,7 +502,7 @@ def _render_chat_thread(
                 <div class="{card_class}">
                     <div class="message-header">
                         <span>{message.sender_username}</span>
-                        <span>{message.created_at}</span>
+                        <span>{format_display_time(message.created_at)}</span>
                     </div>
                     <div>{message.content}</div>
                 </div>
@@ -538,6 +581,7 @@ def render_app(settings: Settings, current_user: User | None) -> None:
         return
 
     _render_chat_thread(settings, current_user, active_contact)
+
 
 
 
