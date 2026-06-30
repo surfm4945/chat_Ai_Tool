@@ -19,6 +19,7 @@ from src.chat_ai_tool.repositories import (
     get_user_by_username,
     revoke_all_user_sessions,
     revoke_session,
+    update_user_password,
     touch_session,
     update_last_login,
 )
@@ -56,6 +57,15 @@ def validate_registration_input(username: str, email: str, password: str, confir
         raise ValueError("Username must be at least 3 characters long.")
     if "@" not in email or "." not in email.split("@")[-1]:
         raise ValueError("Please enter a valid email address.")
+    if len(password) < 8:
+        raise ValueError("Password must be at least 8 characters long.")
+    if password != confirm_password:
+        raise ValueError("Passwords do not match.")
+
+
+def validate_password_input(password: str, confirm_password: str) -> None:
+    """Validate password-only forms such as reset and change password."""
+
     if len(password) < 8:
         raise ValueError("Password must be at least 8 characters long.")
     if password != confirm_password:
@@ -131,6 +141,61 @@ def login_user(settings: Settings, username_or_email: str, password: str) -> Use
     st.session_state.current_user_id = user.id
     st.session_state.current_username = user.username
     return user
+
+
+def _set_new_password(settings: Settings, user_id: int, new_password: str) -> None:
+    """Store a new password hash and revoke old sessions."""
+
+    with database_session(settings) as connection:
+        salt_hex, password_hash = hash_password(new_password)
+        update_user_password(connection, user_id, salt_hex, password_hash)
+        revoke_all_user_sessions(connection, user_id)
+
+
+def reset_password_by_email(
+    settings: Settings,
+    email: str,
+    new_password: str,
+    confirm_password: str,
+) -> None:
+    """Reset a password using the registered email address.
+
+    This is a simple self-service recovery flow for the local app. In a real
+    production app, we would send a secure email reset link instead.
+    """
+
+    validate_password_input(new_password, confirm_password)
+    normalized_email = normalize_email(email)
+
+    with database_session(settings) as connection:
+        user = get_user_by_email(connection, normalized_email)
+        if user is None:
+            raise ValueError("No account was found for that email address.")
+
+    _set_new_password(settings, user.id, new_password)
+
+
+def change_password(
+    settings: Settings,
+    user_id: int,
+    current_password: str,
+    new_password: str,
+    confirm_password: str,
+) -> None:
+    """Change a logged-in user's password after verifying the current one."""
+
+    validate_password_input(new_password, confirm_password)
+
+    with database_session(settings) as connection:
+        row = get_user_by_id(connection, user_id)
+        if row is None:
+            raise ValueError("Your account could not be found.")
+
+        auth_row = get_user_auth_row(connection, row.email)
+        if auth_row is None or not verify_password(current_password, auth_row["password_salt"], auth_row["password_hash"]):
+            raise ValueError("Current password is incorrect.")
+
+    _set_new_password(settings, user_id, new_password)
 
 
 def restore_session(settings: Settings) -> User | None:

@@ -139,6 +139,24 @@ def update_last_login(connection: sqlite3.Connection, user_id: int) -> None:
     )
 
 
+def update_user_password(
+    connection: sqlite3.Connection,
+    user_id: int,
+    password_salt: str,
+    password_hash: str,
+) -> None:
+    """Replace the stored password hash for a user."""
+
+    connection.execute(
+        """
+        UPDATE users
+        SET password_salt = ?, password_hash = ?
+        WHERE id = ?
+        """,
+        (password_salt, password_hash, user_id),
+    )
+
+
 def list_contacts(connection: sqlite3.Connection, current_user_id: int) -> list[Contact]:
     """List other active users and their latest session activity."""
 
